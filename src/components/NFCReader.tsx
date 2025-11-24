@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Button, Text, Stack, Alert, Group, Loader } from "@mantine/core";
+import { Button, Text, Stack, Alert, Loader } from "@mantine/core";
 import { IconNfc, IconNfcOff, IconAlertCircle } from "@tabler/icons-react";
 
 interface NFCReaderProps {

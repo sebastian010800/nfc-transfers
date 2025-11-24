@@ -23,6 +23,7 @@ import {
   IconAlertCircle,
   IconBeer,
   IconShirt,
+  IconPackage,
 } from "@tabler/icons-react";
 import { type Product, subscribeProducts } from "../services/productService";
 import {
@@ -37,6 +38,7 @@ export default function BarmanPage() {
   const [celular, setCelular] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [productId, setProductId] = useState<string | null>(null);
+  const [cantidad, setCantidad] = useState<string>("1");
   const [loadingList, setLoadingList] = useState(true);
   const [tipoSeleccionado, setTipoSeleccionado] = useState<"BAR" | "MERCH" | null>(null);
 
@@ -84,6 +86,7 @@ export default function BarmanPage() {
     setTipoSeleccionado(tipo);
     localStorage.setItem(TIPO_STORAGE_KEY, tipo);
     setProductId(null); // Limpiar producto seleccionado al cambiar tipo
+    setCantidad("1"); // Resetear cantidad
   };
 
   const onSubmit = async () => {
@@ -97,25 +100,70 @@ export default function BarmanPage() {
       });
       return;
     }
+
+    const cantidadNum = parseInt(cantidad, 10);
+    if (isNaN(cantidadNum) || cantidadNum < 1) {
+      setResult({
+        ok: false,
+        title: "Cantidad inválida",
+        message: "La cantidad debe ser al menos 1.",
+        color: "red",
+      });
+      return;
+    }
+
     try {
       setSubmitting(true);
-      const tx = await createDescuentoByCelular({
-        celular,
-        idProducto: productId,
-      });
-      const fmt = formatTransactionForList(tx);
-      setResult({
-        ok: tx.estado === "Exitoso",
-        title: fmt.subtitulo,
-        message: fmt.detalle,
-        color: fmt.color,
-      });
+      
+      // Procesar múltiples transacciones según la cantidad
+      let exitosas = 0;
+      let fallidas = 0;
+      let ultimaTx = null;
 
-      if (tx.estado === "Exitoso") {
-        setTimeout(() => {
-          setCelular("");
-          setProductId(null);
-        }, 2000);
+      for (let i = 0; i < cantidadNum; i++) {
+        const tx = await createDescuentoByCelular({
+          celular,
+          idProducto: productId,
+        });
+        ultimaTx = tx;
+        
+        if (tx.estado === "Exitoso") {
+          exitosas++;
+        } else {
+          fallidas++;
+          // Si falla una transacción, detener el proceso
+          break;
+        }
+      }
+
+      if (ultimaTx) {
+        const fmt = formatTransactionForList(ultimaTx);
+        
+        if (cantidadNum > 1) {
+          // Mensaje para múltiples items
+          setResult({
+            ok: exitosas > 0,
+            title: fallidas > 0 ? "Transacción parcial" : "Transacciones exitosas",
+            message: `Procesadas ${exitosas} de ${cantidadNum} unidades.\n${fmt.detalle}`,
+            color: fallidas > 0 ? "red" : "green",
+          });
+        } else {
+          // Mensaje para un solo item
+          setResult({
+            ok: ultimaTx.estado === "Exitoso",
+            title: fmt.subtitulo,
+            message: fmt.detalle,
+            color: ultimaTx.estado === "Exitoso" ? "green" : "red",
+          });
+        }
+
+        if (exitosas > 0) {
+          setTimeout(() => {
+            setCelular("");
+            setProductId(null);
+            setCantidad("1");
+          }, 2000);
+        }
       }
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (e) {
@@ -237,14 +285,37 @@ export default function BarmanPage() {
                 placeholder="Selecciona un producto"
                 data={productosFiltrados.map((p) => ({
                   value: p.id,
-                  label: `${p.nombre} ( ${p.valor} )`,
+                  label: `${p.nombre} ($${p.valor.toLocaleString()})`,
                 }))}
                 value={productId}
-                onChange={setProductId}
+                onChange={(val) => {
+                  setProductId(val);
+                  setCantidad("1"); // Resetear cantidad al cambiar producto
+                }}
                 leftSection={<IconShoppingCart size={16} />}
                 searchable
                 nothingFoundMessage={`Sin productos de tipo ${tipoSeleccionado}`}
                 disabled={submitting}
+              />
+            </div>
+
+            {/* Selector de cantidad */}
+            <div>
+              <Text fw={500} mb={6}>
+                Cantidad
+              </Text>
+              <Select
+                value={cantidad}
+                onChange={(val) => setCantidad(val || "1")}
+                data={[
+                  { value: "1", label: "1 unidad" },
+                  { value: "2", label: "2 unidades" },
+                  { value: "3", label: "3 unidades" },
+                  { value: "4", label: "4 unidades" },
+                  { value: "5", label: "5 unidades" },
+                ]}
+                leftSection={<IconPackage size={16} />}
+                disabled={submitting || !productId}
               />
             </div>
 
@@ -254,13 +325,13 @@ export default function BarmanPage() {
                 loading={submitting}
                 disabled={loadingList || !celular || !productId}
               >
-                Descontar saldo
+                Descontar saldo ({cantidad} {parseInt(cantidad) === 1 ? "unidad" : "unidades"})
               </Button>
             </Group>
 
             {result && (
               <Alert
-                color={result.color}
+                color={result.ok ? "green" : "red"}
                 title={result.ok ? "Transacción realizada" : "Transacción fallida"}
                 icon={result.ok ? <IconCheck /> : <IconAlertCircle />}
               >
@@ -270,7 +341,7 @@ export default function BarmanPage() {
                     {result.message}
                   </Text>
                   <Group gap="xs" mt="xs">
-                    <Badge variant="light" color={result.color}>
+                    <Badge variant="light" color={result.ok ? "green" : "red"}>
                       {result.ok ? "Exitoso" : "Fallido"}
                     </Badge>
                   </Group>

@@ -53,6 +53,14 @@ export default function AdminLayout() {
             active={pathname.startsWith("/admin/experiences")}
             my={4}
           />
+            <NavLink
+            component={Link}
+            to="/admin/transactions"
+            label="Transacciones"
+            leftSection={<IconCalendarStar size={16} />}
+            active={pathname.startsWith("/admin/transactions")}
+            my={4}
+          />
         </ScrollArea>
       </AppShell.Navbar>
 

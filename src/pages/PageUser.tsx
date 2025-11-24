@@ -44,6 +44,7 @@ import {
   type TransactionHistory,
   getTransactionsByCelular,
   formatTransactionForList,
+  createRecargaByCelular,
 } from "../services/transactionService";
 
 /** Extrae userId desde un QR que apunta a /host?userId=... (o variantes). */
@@ -228,7 +229,8 @@ export default function UserProfilePage() {
     if (!user || !pendingContact) return;
     try {
       await addContact(user.id, pendingContact.id);
-
+      await createRecargaByCelular({celular: user.celular, idExperiencia: "ioAFSCXNpX8v8XVsmGyj"});
+      loadTransactions(user.celular);
       const updated: AppUser[] = [];
       for (const cid of [...(user.contactos ?? []), pendingContact.id]) {
         const c = await getUser(cid);

@@ -21,6 +21,7 @@ export interface Product {
   nombre: string;
   valor: number;
   tipo: string;
+  cantidad: number; // ← Campo nuevo para inventario
   createdAt: Timestamp;
 }
 type ProductDoc = Omit<Product, "id">;
@@ -43,12 +44,14 @@ export async function createProduct(data: {
   nombre: string;
   valor: number;
   tipo: string;
+  cantidad: number; // ← Requerido al crear
 }): Promise<string> {
   const ref = doc(collection(db, "productos")).withConverter(productConverter);
   const payload: WithFieldValue<ProductDoc> = {
     nombre: data.nombre,
     valor: data.valor,
-    tipo: data.tipo,  
+    tipo: data.tipo,
+    cantidad: Math.max(0, data.cantidad), // Asegurar que no sea negativo
     createdAt: Timestamp.now(),
   };
   await setDoc(ref, payload);
@@ -57,7 +60,7 @@ export async function createProduct(data: {
 
 export async function updateProduct(
   id: string,
-  data: Partial<Pick<Product, "nombre" | "valor">>
+  data: Partial<Pick<Product, "nombre" | "valor" | "cantidad">> // ← Permitir actualizar cantidad
 ) {
   await updateDoc(doc(db, "productos", id), data);
 }

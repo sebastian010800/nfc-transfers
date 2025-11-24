@@ -38,7 +38,7 @@ import type { CellValue } from "../../hooks/useSafeXlsx";
 
 const TEMPLATE_URL = "/plantilla_productos.xlsx"; // Asegúrate de crear esta plantilla
 
-type BulkRow = { nombre: string; valor: number, tipo: string };
+type BulkRow = { nombre: string; valor: number; tipo: string; cantidad: number };
 type BulkError = { row: number; reason: string };
 
 export default function ProductsPage() {
@@ -70,10 +70,16 @@ export default function ProductsPage() {
   // create modal
   const [createOpen, { open: openCreate, close: closeCreate }] =
     useDisclosure(false);
-  const [newItem, setNewItem] = useState<{ nombre: string; valor: number, tipo: string }>({
+  const [newItem, setNewItem] = useState<{
+    nombre: string;
+    valor: number;
+    tipo: string;
+    cantidad: number;
+  }>({
     nombre: "",
     valor: 0,
     tipo: "BAR",
+    cantidad: 0,
   });
   const [creating, setCreating] = useState(false);
 
@@ -82,7 +88,7 @@ export default function ProductsPage() {
     setCreating(true);
     try {
       await createProduct(newItem);
-      setNewItem({ nombre: "", valor: 0 , tipo: "BAR"});
+      setNewItem({ nombre: "", valor: 0, tipo: "BAR", cantidad: 0 });
       closeCreate();
     } finally {
       setCreating(false);
@@ -103,6 +109,7 @@ export default function ProductsPage() {
     await updateProduct(editItem.id, {
       nombre: editItem.nombre,
       valor: editItem.valor,
+      cantidad: editItem.cantidad,
     });
     closeEdit();
   };
@@ -113,7 +120,8 @@ export default function ProductsPage() {
   };
 
   // ======== BULK UPLOAD ========
-  const [bulkOpened, { open: openBulk, close: closeBulk }] = useDisclosure(false);
+  const [bulkOpened, { open: openBulk, close: closeBulk }] =
+    useDisclosure(false);
   const [bulkRows, setBulkRows] = useState<BulkRow[]>([]);
   const [bulkReport, setBulkReport] = useState<{
     okCount: number;
@@ -157,21 +165,40 @@ export default function ProductsPage() {
     normalized.forEach((r, idx) => {
       const rowNum = idx + 2;
       const nombre = String(r["nombre"] ?? "").trim();
-      const tipo = String(r["nombre"] ?? "").trim();
+      const tipo = String(r["tipo"] ?? "").trim();
       const valorRaw = r["valor"] ?? r["precio"];
       const valor = valorRaw == null || valorRaw === "" ? 0 : Number(valorRaw);
+      const cantidadRaw = r["cantidad"] ?? r["inventario"];
+      const cantidad =
+        cantidadRaw == null || cantidadRaw === "" ? 0 : Number(cantidadRaw);
 
       if (!nombre) {
         errors.push({ row: rowNum, reason: "Nombre requerido" });
       }
       if (isNaN(valor) || valor < 0) {
-        errors.push({ row: rowNum, reason: "Valor inválido (debe ser número ≥ 0)" });
+        errors.push({
+          row: rowNum,
+          reason: "Valor inválido (debe ser número ≥ 0)",
+        });
       }
       if (!tipo) {
         errors.push({ row: rowNum, reason: "Tipo requerido" });
       }
-      if (nombre && !isNaN(valor) && valor >= 0) {
-        parsed.push({ nombre, valor, tipo });
+      if (isNaN(cantidad) || cantidad < 0) {
+        errors.push({
+          row: rowNum,
+          reason: "Cantidad inválida (debe ser número ≥ 0)",
+        });
+      }
+      if (
+        nombre &&
+        tipo &&
+        !isNaN(valor) &&
+        valor >= 0 &&
+        !isNaN(cantidad) &&
+        cantidad >= 0
+      ) {
+        parsed.push({ nombre, valor, tipo, cantidad });
       }
     });
 
@@ -197,7 +224,10 @@ export default function ProductsPage() {
         await createProduct(row);
         okCount++;
       } catch (err) {
-        errors.push({ row: rowNum, reason: "Error al crear (posible duplicado o fallo de red)" });
+        errors.push({
+          row: rowNum,
+          reason: "Error al crear (posible duplicado o fallo de red)",
+        });
       }
     }
 
@@ -274,6 +304,7 @@ export default function ProductsPage() {
               <Table.Th>Nombre</Table.Th>
               <Table.Th>Valor</Table.Th>
               <Table.Th>Tipo</Table.Th>
+              <Table.Th>Cantidad</Table.Th>
               <Table.Th ta="center">Acciones</Table.Th>
             </Table.Tr>
           </Table.Thead>
@@ -282,9 +313,19 @@ export default function ProductsPage() {
               <Table.Tr key={p.id}>
                 <Table.Td>{p.nombre}</Table.Td>
                 <Table.Td>
-                  <Badge variant="light">${p.valor.toLocaleString("es-CO")}</Badge>
+                  <Badge variant="light">
+                    ${p.valor.toLocaleString("es-CO")}
+                  </Badge>
                 </Table.Td>
                 <Table.Td>{p.tipo}</Table.Td>
+                <Table.Td>
+                  <Badge
+                    variant="dot"
+                    color={p.cantidad === 0 ? "red" : p.cantidad < 10 ? "yellow" : "green"}
+                  >
+                    {p.cantidad}
+                  </Badge>
+                </Table.Td>
                 <Table.Td>
                   <Group gap="xs" justify="center">
                     <ActionIcon variant="subtle" onClick={() => onEdit(p)}>
@@ -303,7 +344,7 @@ export default function ProductsPage() {
             ))}
             {pageSlice.length === 0 && (
               <Table.Tr>
-                <Table.Td colSpan={3}>
+                <Table.Td colSpan={5}>
                   <Text c="dimmed" ta="center">
                     Sin resultados
                   </Text>
@@ -314,17 +355,29 @@ export default function ProductsPage() {
         </Table>
 
         <Group justify="center" mt="sm">
-          <Pagination value={page} onChange={setPage} total={totalPages} size="sm" />
+          <Pagination
+            value={page}
+            onChange={setPage}
+            total={totalPages}
+            size="sm"
+          />
         </Group>
       </Paper>
 
       {/* Modal Crear */}
-      <Modal opened={createOpen} onClose={closeCreate} title="Nuevo producto" centered>
+      <Modal
+        opened={createOpen}
+        onClose={closeCreate}
+        title="Nuevo producto"
+        centered
+      >
         <Stack>
           <TextInput
             label="Nombre"
             value={newItem.nombre}
-            onChange={(e) => setNewItem({ ...newItem, nombre: e.currentTarget.value })}
+            onChange={(e) =>
+              setNewItem({ ...newItem, nombre: e.currentTarget.value })
+            }
             required
           />
           <NumberInput
@@ -335,13 +388,22 @@ export default function ProductsPage() {
             thousandSeparator="."
             decimalSeparator=","
           />
-        <Select
-  label="Tipo"
-  value={newItem.tipo}
-  onChange={(value) => setNewItem({ ...newItem, tipo: value || '' })}
-  data={['BAR', 'MERCH']}
-  required
-/>
+          <Select
+            label="Tipo"
+            value={newItem.tipo}
+            onChange={(value) => setNewItem({ ...newItem, tipo: value || "" })}
+            data={["BAR", "MERCH"]}
+            required
+          />
+          <NumberInput
+            label="Cantidad (inventario)"
+            value={newItem.cantidad}
+            onChange={(v) =>
+              setNewItem({ ...newItem, cantidad: Number(v ?? 0) })
+            }
+            min={0}
+            description="Cantidad disponible en inventario"
+          />
           <Group justify="end">
             <Button onClick={handleCreate} loading={creating}>
               Crear
@@ -351,21 +413,39 @@ export default function ProductsPage() {
       </Modal>
 
       {/* Modal Editar */}
-      <Modal opened={editOpen} onClose={closeEdit} title="Editar producto" centered>
+      <Modal
+        opened={editOpen}
+        onClose={closeEdit}
+        title="Editar producto"
+        centered
+      >
         {editItem && (
           <Stack>
             <TextInput
               label="Nombre"
               value={editItem.nombre}
-              onChange={(e) => setEditItem({ ...editItem, nombre: e.currentTarget.value })}
+              onChange={(e) =>
+                setEditItem({ ...editItem, nombre: e.currentTarget.value })
+              }
             />
             <NumberInput
               label="Valor"
               value={editItem.valor}
-              onChange={(v) => setEditItem({ ...editItem, valor: Number(v ?? 0) })}
+              onChange={(v) =>
+                setEditItem({ ...editItem, valor: Number(v ?? 0) })
+              }
               min={0}
               thousandSeparator="."
               decimalSeparator=","
+            />
+            <NumberInput
+              label="Cantidad (inventario)"
+              value={editItem.cantidad}
+              onChange={(v) =>
+                setEditItem({ ...editItem, cantidad: Number(v ?? 0) })
+              }
+              min={0}
+              description="Cantidad disponible en inventario"
             />
             <Group justify="end">
               <Button onClick={handleSaveEdit}>Guardar</Button>
@@ -407,7 +487,8 @@ export default function ProductsPage() {
                 input.type = "file";
                 input.accept = ".xlsx,.xlsm";
                 input.onchange = (e) => {
-                  const file = (e.target as HTMLInputElement).files?.[0] || null;
+                  const file =
+                    (e.target as HTMLInputElement).files?.[0] || null;
                   if (file) void parseExcel(file);
                 };
                 input.click();
@@ -423,8 +504,12 @@ export default function ProductsPage() {
             <Text size="sm" fw={600}>
               Resumen del archivo
             </Text>
-            <Text size="sm">Válidos: <strong>{bulkReport.okCount}</strong></Text>
-            <Text size="sm">Con errores: <strong>{bulkReport.errorCount}</strong></Text>
+            <Text size="sm">
+              Válidos: <strong>{bulkReport.okCount}</strong>
+            </Text>
+            <Text size="sm">
+              Con errores: <strong>{bulkReport.errorCount}</strong>
+            </Text>
 
             {bulkReport.errors.length > 0 && (
               <>

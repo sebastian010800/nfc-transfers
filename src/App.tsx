@@ -10,6 +10,7 @@ import ExperiencesPage from "./pages/admin/experiences";
 import BarmanPage from "./pages/barman";
 import HostPage from "./pages/host";
 import PageUser from "./pages/PageUser"; // 👈 NUEVO
+import TransactionsPage from "./pages/admin/transactions";
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
           <Route path="users" element={<UsersPage />} />
           <Route path="products" element={<ProductsPage />} />
           <Route path="experiences" element={<ExperiencesPage />} />
+          <Route path="transactions" element={<TransactionsPage />} />
         </Route>
       </Routes>
     </Container>

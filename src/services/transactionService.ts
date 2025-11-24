@@ -40,6 +40,7 @@ export interface TransactionHistory {
   valor: number;
 
   estado: EstadoTransaccion; // Exitoso | Fallido
+  mensajeError?: string; // ← Campo opcional para detallar errores
   createdAt: Timestamp;
 }
 
@@ -55,6 +56,7 @@ interface AppUserDoc {
 interface ProductoDoc {
   nombre: string;
   valor: number;
+  cantidad: number; // ← Campo de inventario
 }
 interface ExperienciaDoc {
   nombre: string;
@@ -105,6 +107,7 @@ export async function createRecargaByCelular(params: {
       idExperiencia: params.idExperiencia,
       valor: 0,
       estado: "Fallido",
+      mensajeError: "Usuario no encontrado",
       createdAt: Timestamp.now(),
     };
     await setDoc(txRef, payload);
@@ -136,6 +139,9 @@ export async function createRecargaByCelular(params: {
         nombreExperiencia: nombreExp,
         valor: 0,
         estado: "Fallido",
+        mensajeError: !expSnap.exists()
+          ? "Experiencia no encontrada"
+          : "Usuario no encontrado",
         createdAt: Timestamp.now(),
       };
       trx.set(txRef, payload);
@@ -185,6 +191,7 @@ export async function createDescuentoByCelular(params: {
       idProducto: params.idProducto,
       valor: 0,
       estado: "Fallido",
+      mensajeError: "Usuario no encontrado",
       createdAt: Timestamp.now(),
     };
     await setDoc(txRef, payload);
@@ -216,6 +223,9 @@ export async function createDescuentoByCelular(params: {
         nombreProducto: nombreProd,
         valor: 0,
         estado: "Fallido",
+        mensajeError: !prodSnap.exists()
+          ? "Producto no encontrado"
+          : "Usuario no encontrado",
         createdAt: Timestamp.now(),
       };
       trx.set(txRef, payload);
@@ -226,9 +236,10 @@ export async function createDescuentoByCelular(params: {
     const prod = prodSnap.data() as ProductoDoc;
     const amount = Math.max(0, Number(prod.valor || 0));
     const saldoActual = Number(u.saldo || 0);
+    const cantidadDisponible = Number(prod.cantidad || 0);
 
-    if (amount <= 0 || saldoActual < amount) {
-      // saldo insuficiente o valor inválido: no descontar
+    // ——— VALIDACIÓN DE INVENTARIO ———
+    if (cantidadDisponible < 1) {
       const payload: WithFieldValue<TransactionDoc> = {
         celular: u.celular,
         idUser: userSnap.id,
@@ -238,15 +249,54 @@ export async function createDescuentoByCelular(params: {
         nombreProducto: prod.nombre,
         valor: amount,
         estado: "Fallido",
+        mensajeError: "Producto sin inventario disponible",
         createdAt: Timestamp.now(),
       };
       trx.set(txRef, payload);
       return;
     }
 
-    // descontar
+    // Validación de valor y saldo
+    if (amount <= 0) {
+      const payload: WithFieldValue<TransactionDoc> = {
+        celular: u.celular,
+        idUser: userSnap.id,
+        nombreUsuario: u.nombre,
+        tipoTransaccion: "DESCUENTO",
+        idProducto: params.idProducto,
+        nombreProducto: prod.nombre,
+        valor: amount,
+        estado: "Fallido",
+        mensajeError: "Valor del producto inválido",
+        createdAt: Timestamp.now(),
+      };
+      trx.set(txRef, payload);
+      return;
+    }
+
+    if (saldoActual < amount) {
+      const payload: WithFieldValue<TransactionDoc> = {
+        celular: u.celular,
+        idUser: userSnap.id,
+        nombreUsuario: u.nombre,
+        tipoTransaccion: "DESCUENTO",
+        idProducto: params.idProducto,
+        nombreProducto: prod.nombre,
+        valor: amount,
+        estado: "Fallido",
+        mensajeError: `Saldo insuficiente (disponible: ${saldoActual}, requerido: ${amount})`,
+        createdAt: Timestamp.now(),
+      };
+      trx.set(txRef, payload);
+      return;
+    }
+
+    // ——— TRANSACCIÓN EXITOSA: descontar saldo Y cantidad ———
     const newSaldo = saldoActual - amount;
+    const newCantidad = cantidadDisponible - 1;
+
     trx.update(userRef, { saldo: newSaldo });
+    trx.update(prodRef, { cantidad: newCantidad }); // ← Decrementar inventario
 
     const payload: WithFieldValue<TransactionDoc> = {
       celular: u.celular,
@@ -338,12 +388,13 @@ export function formatTransactionForList(t: TransactionHistory): {
     : `Nombre de la experiencia: ${t.nombreExperiencia ?? "-"}`;
   const valorLinea = `Valor: ${t.valor}`;
   const estadoLinea = `Estado: ${t.estado}`;
+  const errorLinea = t.mensajeError ? `\nError: ${t.mensajeError}` : "";
   const fechaLinea = `Fecha y hora: ${fecha}`;
 
   return {
     titulo,
     subtitulo: `Tipo de transacción: ${subtipo}`,
-    detalle: `${productoOExp}\n${valorLinea}\n${estadoLinea}\n${fechaLinea}`,
+    detalle: `${productoOExp}\n${valorLinea}\n${estadoLinea}${errorLinea}\n${fechaLinea}`,
     color,
   };
 }
