@@ -41,6 +41,7 @@ export default function BarmanPage() {
   const [cantidad, setCantidad] = useState<string>("1");
   const [loadingList, setLoadingList] = useState(true);
   const [tipoSeleccionado, setTipoSeleccionado] = useState<"BAR" | "MERCH" | null>(null);
+  
 
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{
@@ -182,6 +183,19 @@ export default function BarmanPage() {
   const productosFiltrados = products.filter(
     (p) => p.tipo === tipoSeleccionado
   );
+  const productoQty = () => {
+    const selectedProduct = products.find((p) => p.id === productId);
+
+// Construir dinámicamente las cantidades:
+// - Máximo 5
+// - O menos si el stock es menor
+const maxCantidad = selectedProduct ? Math.min(selectedProduct.cantidad, 5) : 5;
+
+return Array.from({ length: maxCantidad }, (_, i) => ({
+  value: (i + 1).toString(),
+  label: `${i + 1} unidad${i + 1 > 1 ? "es" : ""}`,
+}));
+  }
 
   return (
     <Container size="sm" mt="xl">
@@ -283,10 +297,12 @@ export default function BarmanPage() {
               </Group>
               <Select
                 placeholder="Selecciona un producto"
-                data={productosFiltrados.map((p) => ({
-                  value: p.id,
-                  label: `${p.nombre} ($${p.valor.toLocaleString()})`,
-                }))}
+                data={productosFiltrados
+                  .filter((p) => p.cantidad > 0) // ← Oculta productos que no tienen existencias
+                  .map((p) => ({
+                    value: p.id,
+                    label: `${p.nombre} ($${p.valor.toLocaleString()}) — Stock: ${p.cantidad}`,
+                  }))}
                 value={productId}
                 onChange={(val) => {
                   setProductId(val);
@@ -300,32 +316,29 @@ export default function BarmanPage() {
             </div>
 
             {/* Selector de cantidad */}
+         
             <div>
+              
               <Text fw={500} mb={6}>
                 Cantidad
               </Text>
               <Select
                 value={cantidad}
                 onChange={(val) => setCantidad(val || "1")}
-                data={[
-                  { value: "1", label: "1 unidad" },
-                  { value: "2", label: "2 unidades" },
-                  { value: "3", label: "3 unidades" },
-                  { value: "4", label: "4 unidades" },
-                  { value: "5", label: "5 unidades" },
-                ]}
+                data={productoQty()}
                 leftSection={<IconPackage size={16} />}
                 disabled={submitting || !productId}
               />
             </div>
 
             <Group>
+              
               <Button
                 onClick={onSubmit}
                 loading={submitting}
                 disabled={loadingList || !celular || !productId}
               >
-                Descontar saldo ({cantidad} {parseInt(cantidad) === 1 ? "unidad" : "unidades"})
+                Descontar saldo {parseInt(cantidad) * products.find(p => p.id === productId)?.valor || ""}
               </Button>
             </Group>
 
