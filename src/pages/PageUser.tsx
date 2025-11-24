@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Alert,
   Badge,
@@ -22,6 +22,7 @@ import {
   IconQrcode,
   IconUserPlus,
   IconRefresh,
+  IconTrash,
 } from "@tabler/icons-react";
 import QRCode from "react-qr-code";
 import { Scanner } from "@yudiel/react-qr-scanner";
@@ -62,6 +63,9 @@ function extractUserIdFromQr(value: string): string | null {
   }
 }
 
+// Constante para la clave de localStorage
+const STORAGE_KEY = "user_profile_celular";
+
 export default function UserProfilePage() {
   const [celularInput, setCelularInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -69,8 +73,20 @@ export default function UserProfilePage() {
   const [user, setUser] = useState<AppUser | null>(null);
   const [transactions, setTransactions] = useState<TransactionHistory[]>([]);
   const [contacts, setContacts] = useState<AppUser[]>([]);
+  const [qrModalOpened, setQrModalOpened] = useState(false);
 
-  const loadUser = async () => {
+  // Cargar celular desde localStorage al montar el componente
+  useEffect(() => {
+    const savedCelular = localStorage.getItem(STORAGE_KEY);
+    if (savedCelular) {
+      setCelularInput(savedCelular);
+      // Auto-cargar los datos del usuario guardado
+      loadUserByCelular(savedCelular);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const loadUserByCelular = async (celular: string) => {
     setLoading(true);
     setUser(null);
     setTransactions([]);
@@ -78,14 +94,19 @@ export default function UserProfilePage() {
 
     try {
       const all = await getUsersOnce();
-      const u = all.find((x) => x.celular === celularInput.trim()) ?? null;
+      const u = all.find((x) => x.celular === celular.trim()) ?? null;
 
       if (!u) {
         setUser(null);
+        // Si no se encuentra, limpiar localStorage
+        localStorage.removeItem(STORAGE_KEY);
         return;
       }
 
       setUser(u);
+
+      // Guardar en localStorage solo si se encontró el usuario
+      localStorage.setItem(STORAGE_KEY, celular.trim());
 
       // Cargar transacciones usando el celular
       await loadTransactions(u.celular);
@@ -99,9 +120,15 @@ export default function UserProfilePage() {
       setContacts(resolved);
     } catch (error) {
       console.error("Error al cargar usuario:", error);
+      // En caso de error, también limpiar localStorage
+      localStorage.removeItem(STORAGE_KEY);
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadUser = async () => {
+    await loadUserByCelular(celularInput);
   };
 
   const loadTransactions = async (celular: string) => {
@@ -122,6 +149,14 @@ export default function UserProfilePage() {
   const refreshTransactions = async () => {
     if (!user) return;
     await loadTransactions(user.celular);
+  };
+
+  const clearSavedUser = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    setCelularInput("");
+    setUser(null);
+    setTransactions([]);
+    setContacts([]);
   };
 
   // Modal Agregar contacto
@@ -166,15 +201,8 @@ export default function UserProfilePage() {
       setAddError("El usuario del QR no existe.");
       return;
     }
+    console.log("Contacto escaneado:", contact);
     setPendingContact(contact);
-  };
-
-  const scannerOnDecode = (val: string | undefined) => {
-    if (typeof val === "string") void handleScan(val);
-  };
-
-  const scannerOnError = (err: unknown) => {
-    setAddError(`Error de cámara: ${String(err)}`);
   };
 
   const handleFindByCel = async () => {
@@ -233,22 +261,48 @@ export default function UserProfilePage() {
         Consulta por celular, visualiza datos, historial, QR y contactos.
       </Text>
 
-      <Group align="flex-end" mb="md">
-        <TextInput
-          label="Celular"
-          placeholder="3101234567"
-          value={celularInput}
-          onChange={(e) => setCelularInput(e.currentTarget.value)}
-          style={{ minWidth: 260 }}
-        />
-        <Button
-          onClick={loadUser}
-          disabled={!celularInput.trim()}
-          loading={loading}
-        >
-          Buscar
-        </Button>
-      </Group>
+      {!user ? (
+        <Group align="flex-end" mb="md">
+          <TextInput
+            label="Celular"
+            placeholder="3101234567"
+            value={celularInput}
+            onChange={(e) => setCelularInput(e.currentTarget.value)}
+            style={{ minWidth: 260 }}
+          />
+          <Button
+            onClick={loadUser}
+            disabled={!celularInput.trim()}
+            loading={loading}
+          >
+            Buscar
+          </Button>
+        </Group>
+      ) : (
+        <Group justify="space-between" align="center" mb="md">
+          <Alert color="blue" style={{ flex: 1 }}>
+            <Group justify="space-between" align="center">
+              <div>
+                <Text size="sm" fw={500}>
+                  Sesión activa
+                </Text>
+                <Text size="xs" c="dimmed">
+                  Viendo perfil de: {user.celular}
+                </Text>
+              </div>
+              <Button
+                variant="light"
+                color="red"
+                size="sm"
+                leftSection={<IconTrash size={16} />}
+                onClick={clearSavedUser}
+              >
+                Cerrar sesión
+              </Button>
+            </Group>
+          </Alert>
+        </Group>
+      )}
 
       {loading && (
         <Paper withBorder p="md" radius="md">
@@ -257,12 +311,6 @@ export default function UserProfilePage() {
             <Text>Cargando información del usuario...</Text>
           </Group>
         </Paper>
-      )}
-
-      {!loading && !user && celularInput && (
-        <Alert color="red" icon={<IconAlertCircle />}>
-          No se encontró ningún usuario con el celular ingresado.
-        </Alert>
       )}
 
       {user && (
@@ -285,13 +333,38 @@ export default function UserProfilePage() {
                 <Text size="sm" c="dimmed">
                   Mi QR
                 </Text>
-                <QRCode value={user.qrCodeValue} size={128} />
+                <div
+                  onClick={() => setQrModalOpened(true)}
+                  style={{ cursor: "pointer" }}
+                  title="Click para ampliar"
+                >
+                  <div
+                    style={{
+                      padding: 20,
+                      background: "white",
+                      borderRadius: 16,
+                      display: "inline-block",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
+                    }}
+                  >
+                    <QRCode
+                      value={user.qrCodeValue} // ← Usa SOLO el ID (no URL larga)
+                      size={140}
+                      level="H" // ← ESTO ES LO QUE FALLABA
+                      fgColor="#000000"
+                      bgColor="#ffffff"
+                    />
+                  </div>
+                  <Text size="xs" c="dimmed" ta="center" mt={8}>
+                    Toca para ampliar
+                  </Text>
+                </div>
               </Stack>
             </Group>
           </Paper>
 
           {/* Historial de transacciones */}
-          <Paper withBorder p="md" radius="md" mb="md">
+          <Paper withBorder p="md"  radius="md" mb="md">
             <Group justify="space-between" mb="xs">
               <Group>
                 <Title order={4}>Historial de transacciones</Title>
@@ -321,6 +394,7 @@ export default function UserProfilePage() {
                 Sin transacciones registradas para este usuario.
               </Alert>
             ) : (
+              <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
               <Table withRowBorders highlightOnHover>
                 <Table.Thead>
                   <Table.Tr>
@@ -328,7 +402,7 @@ export default function UserProfilePage() {
                     <Table.Th>Detalle</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
-                <Table.Tbody>
+                <Table.Tbody >
                   {txRows.map((r) => (
                     <Table.Tr key={r.id}>
                       <Table.Td width="35%">
@@ -348,6 +422,7 @@ export default function UserProfilePage() {
                   ))}
                 </Table.Tbody>
               </Table>
+              </div>
             )}
           </Paper>
 
@@ -417,17 +492,86 @@ export default function UserProfilePage() {
             />
 
             {addMode === "scan" && (
-              <Stack>
-                <Text size="sm" c="dimmed">
+              <Stack align="center">
+                <Text size="sm" c="dimmed" mb="md">
                   Apunta la cámara al QR del otro usuario
                 </Text>
-                {scanActive && (
-                  <ScannerComponent
-                    onDecode={scannerOnDecode}
-                    onError={scannerOnError}
-                    components={{ finder: true }}
-                  />
-                )}
+
+                {/* Contenedor fijo para evitar glitches en Xiaomi */}
+                <div
+                  style={{
+                    width: "100%",
+                    maxWidth: 400,
+                    height: 400,
+                    borderRadius: 12,
+                    overflow: "hidden",
+                    border: "2px solid #e9ecef",
+                  }}
+                >
+                  {scanActive ? (
+                    <ScannerComponent
+                      onScan={(detectedCodes) => {
+                        // ← CAMBIO CLAVE: Usa onScan, NO onDecode
+                        if (
+                          detectedCodes.length > 0 &&
+                          detectedCodes[0]?.rawValue
+                        ) {
+                          void handleScan(detectedCodes[0].rawValue);
+                          setScanActive(false); // Detiene después de leer
+                        }
+                      }}
+                      onError={(error) => {
+                        console.error("Error de scanner:", error);
+                        setAddError(
+                          `Error de cámara: ${error?.message || String(error)}`
+                        );
+                        // En Xiaomi, reinicia si falla
+                        if (
+                          error?.name === "NotAllowedError" ||
+                          error?.name === "NotFoundError"
+                        ) {
+                          setTimeout(() => setScanActive(false), 1000);
+                        }
+                      }}
+                      // ← SOLO estas props básicas (sin formats ni focusMode que causan el error)
+                      components={{
+                        finder: true, // Cuadro de detección
+                        torch: false, // Desactiva flash para evitar crashes en Redmi viejo
+                      }}
+                      // ← NO uses constraints complejos aquí, causan el "t2 is not a function"
+                      // En su lugar, usa defaults de la librería
+                    />
+                  ) : (
+                    <Paper withBorder p="xl" ta="center" bg="gray.1">
+                      <IconQrcode size={48} c="dimmed" />
+                      <Text c="dimmed" mt="xs">
+                        Escaneo completado o pausado
+                      </Text>
+                      <Button
+                        mt="md"
+                        onClick={() => setScanActive(true)}
+                        leftSection={<IconQrcode size={16} />}
+                        variant="light"
+                      >
+                        Reanudar escaneo
+                      </Button>
+                    </Paper>
+                  )}
+                </div>
+
+                {/* Botón de reinicio manual (útil en MIUI) */}
+                <Button
+                  variant="subtle"
+                  size="sm"
+                  mt="sm"
+                  onClick={() => {
+                    setScanActive(false);
+                    setTimeout(() => setScanActive(true), 500); // Reinicio forzado
+                  }}
+                  disabled={scanActive}
+                >
+                  Reiniciar cámara
+                </Button>
               </Stack>
             )}
 
@@ -471,6 +615,42 @@ export default function UserProfilePage() {
                 </Group>
               </Paper>
             )}
+          </Stack>
+        )}
+      </Modal>
+
+      {/* Modal QR ampliado */}
+      <Modal
+        opened={qrModalOpened}
+        onClose={() => setQrModalOpened(false)}
+        title={`QR de ${user?.nombre || ""}`}
+        size="auto"
+        centered
+      >
+        {user && (
+          <Stack align="center" p="xl">
+            <div
+              style={{
+                padding: 30,
+                background: "white",
+                borderRadius: 24,
+                boxShadow: "0 8px 32px rgba(0,0,0,0.25)",
+              }}
+            >
+              <QRCode
+                value={user.qrCodeValue} // ← solo el ID
+                size={280}
+                level="H" // ← imprescindible
+                fgColor="#000000"
+                bgColor="#ffffff"
+              />
+            </div>
+            <Text size="lg" fw={600} ta="center" mt="md">
+              {user.nombre}
+            </Text>
+            <Text size="sm" c="dimmed" ta="center">
+              {user.celular}
+            </Text>
           </Stack>
         )}
       </Modal>

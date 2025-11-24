@@ -16,6 +16,7 @@ import {
   Text,
   TextInput,
   Title,
+  Loader,
 } from "@mantine/core";
 import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
 import {
@@ -35,6 +36,11 @@ import {
   subscribeUsers,
   updateUser,
 } from "../../services/userService";
+
+import { 
+  getTransactionsByCelular,
+  type TransactionHistory 
+} from "../../services/transactionService";
 
 import { parseXlsxSafely } from "../../hooks/useSafeXlsx";
 import type { CellValue } from "../../hooks/useSafeXlsx";
@@ -128,6 +134,29 @@ export default function UsersPage() {
   const onShowQR = (u: AppUser) => {
     setQrUser(u);
     openQR();
+  };
+
+  // ======== TRANSACTIONS ========
+  const [transactionsOpened, { open: openTransactions, close: closeTransactions }] =
+    useDisclosure(false);
+  const [transactions, setTransactions] = useState<TransactionHistory[]>([]);
+  const [loadingTransactions, setLoadingTransactions] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<AppUser | null>(null);
+
+  const handleShowTransactions = async (user: AppUser) => {
+    setSelectedUser(user);
+    setLoadingTransactions(true);
+    openTransactions();
+    
+    try {
+      const txs = await getTransactionsByCelular(user.celular);
+      setTransactions(txs);
+    } catch (error) {
+      console.error("Error cargando transacciones:", error);
+      setTransactions([]);
+    } finally {
+      setLoadingTransactions(false);
+    }
   };
 
   // ======== BULK (XLSX) ========
@@ -289,13 +318,17 @@ export default function UsersPage() {
           </Table.Thead>
           <Table.Tbody>
             {pageSlice.map((u) => (
-              <Table.Tr key={u.id}>
+              <Table.Tr 
+                key={u.id}
+                style={{ cursor: 'pointer' }}
+                onClick={() => handleShowTransactions(u)}
+              >
                 <Table.Td>{u.nombre}</Table.Td>
                 <Table.Td>{u.celular}</Table.Td>
                 <Table.Td>
                   <Badge variant="light">{u.saldo}</Badge>
                 </Table.Td>
-                <Table.Td>
+                <Table.Td onClick={(e) => e.stopPropagation()}>
                   <Group gap="xs" justify="center">
                     <ActionIcon
                       variant="subtle"
@@ -450,6 +483,111 @@ export default function UsersPage() {
                 Descargar SVG
               </Button>
             </Group>
+          </Stack>
+        )}
+      </Modal>
+
+      {/* Modal: Transactions */}
+      <Modal
+        opened={transactionsOpened}
+        onClose={closeTransactions}
+        title={`Transacciones - ${selectedUser?.nombre || ''}`}
+        size="xl"
+        centered
+      >
+        {loadingTransactions ? (
+          <Group justify="center" py="xl">
+            <Loader size="md" />
+          </Group>
+        ) : (
+          <Stack>
+            {transactions.length === 0 ? (
+              <Text c="dimmed" ta="center" py="xl">
+                No hay transacciones para este usuario
+              </Text>
+            ) : (
+              <>
+                <Text size="sm" c="dimmed">
+                  Total: {transactions.length} transacciones
+                </Text>
+                <Table highlightOnHover>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Fecha</Table.Th>
+                      <Table.Th>Tipo</Table.Th>
+                      <Table.Th>Experiencia/Producto</Table.Th>
+                      <Table.Th>Valor</Table.Th>
+                      <Table.Th>Estado</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {transactions.map((tx) => (
+                      <Table.Tr key={tx.id}>
+                        <Table.Td>
+                          <Text size="sm">
+                            {tx.createdAt?.toDate 
+                              ? new Date(tx.createdAt.toDate()).toLocaleString('es-CO', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })
+                              : '-'}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Badge 
+                            color={
+                              tx.tipoTransaccion === 'RECARGA' ? 'green' : 'red'
+                              
+                              
+                            }
+                            variant="light"
+                          >
+                            {tx.tipoTransaccion}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td>
+                          <Stack gap={0}>
+                            {tx.nombreExperiencia && (
+                              <Text size="sm" fw={500}>
+                                {tx.nombreExperiencia}
+                              </Text>
+                            )}
+                            {tx.nombreProducto && (
+                              <Text size="xs" c="dimmed">
+                                {tx.nombreProducto}
+                              </Text>
+                            )}
+                            {!tx.nombreExperiencia && !tx.nombreProducto && (
+                              <Text size="sm" c="dimmed">-</Text>
+                            )}
+                          </Stack>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text 
+                            fw={500}
+                            c={tx.tipoTransaccion === 'RECARGA' ? 'green' : undefined}
+                          >
+                            {tx.tipoTransaccion === 'RECARGA' ? '+' : '-'}
+                            ${tx.valor.toLocaleString('es-CO')}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Badge
+                            color={tx.estado === 'Exitoso' ? 'green' : 'red'}
+                            variant="dot"
+                          >
+                            {tx.estado}
+                          </Badge>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </>
+            )}
           </Stack>
         )}
       </Modal>
