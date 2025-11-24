@@ -20,6 +20,7 @@ export interface Product {
   id: string;
   nombre: string;
   valor: number;
+  tipo: string;
   createdAt: Timestamp;
 }
 type ProductDoc = Omit<Product, "id">;
@@ -41,11 +42,13 @@ const productsCol = () =>
 export async function createProduct(data: {
   nombre: string;
   valor: number;
+  tipo: string;
 }): Promise<string> {
   const ref = doc(collection(db, "productos")).withConverter(productConverter);
   const payload: WithFieldValue<ProductDoc> = {
     nombre: data.nombre,
     valor: data.valor,
+    tipo: data.tipo,  
     createdAt: Timestamp.now(),
   };
   await setDoc(ref, payload);

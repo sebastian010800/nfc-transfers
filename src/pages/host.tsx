@@ -12,6 +12,7 @@ import {
   Loader,
   Badge,
   Paper,
+  Divider,
 } from "@mantine/core";
 import {
   IconTicket,
@@ -27,6 +28,7 @@ import {
   createRecargaByCelular,
   formatTransactionForList,
 } from "../services/transactionService";
+import { NFCReader } from "../components/NFCReader";
 
 export default function HostPage() {
   const [celular, setCelular] = useState("");
@@ -49,6 +51,24 @@ export default function HostPage() {
     });
     return () => unsub();
   }, []);
+
+  const handleNFCRead = (celularFromNFC: string) => {
+    console.log("Celular desde NFC:", celularFromNFC);
+    setCelular(celularFromNFC);
+    
+    // Mostrar feedback visual
+    setResult({
+      ok: true,
+      title: "NFC leído exitosamente",
+      message: `Celular detectado: ${celularFromNFC}`,
+      color: "green",
+    });
+
+    // Limpiar el mensaje después de 3 segundos
+    setTimeout(() => {
+      setResult(null);
+    }, 3000);
+  };
 
   const onSubmit = async () => {
     setResult(null);
@@ -74,6 +94,14 @@ export default function HostPage() {
         message: fmt.detalle,
         color: fmt.color,
       });
+      
+      // Limpiar el celular después de una transacción exitosa
+      if (tx.estado === "Exitoso") {
+        setTimeout(() => {
+          setCelular("");
+          setExperienceId(null);
+        }, 2000);
+      }
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (e) {
       setResult({
@@ -97,12 +125,25 @@ export default function HostPage() {
       </Text>
 
       <Stack gap="md">
+        {/* Lector NFC */}
+        <NFCReader 
+          onCelularRead={handleNFCRead} 
+          disabled={submitting}
+        />
+
+        <Divider 
+          label="o ingresa manualmente" 
+          labelPosition="center"
+        />
+
+        {/* Input manual de celular */}
         <TextInput
           label="Celular del usuario"
           placeholder="3101234567"
           value={celular}
           onChange={(e) => setCelular(e.currentTarget.value)}
           leftSection={<IconCash size={16} />}
+          disabled={submitting}
         />
 
         <div>
@@ -121,6 +162,7 @@ export default function HostPage() {
             leftSection={<IconTicket size={16} />}
             searchable
             nothingFoundMessage="Sin experiencias"
+            disabled={submitting}
           />
         </div>
 
@@ -128,7 +170,7 @@ export default function HostPage() {
           <Button
             onClick={onSubmit}
             loading={submitting}
-            disabled={loadingList}
+            disabled={loadingList || !celular || !experienceId}
           >
             Recargar saldo
           </Button>
