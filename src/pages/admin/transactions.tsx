@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useMemo, useState } from "react";
 import {
   Badge,
@@ -47,7 +48,7 @@ export default function TransactionsPage() {
   const filtered = useMemo(() => {
     let result = items;
 
-    // Filtro por búsqueda (nombre usuario, celular, producto, experiencia)
+    // Filtro por búsqueda (nombre usuario, celular, producto, experiencia/obra)
     if (q) {
       result = result.filter(
         (i) =>
@@ -93,6 +94,7 @@ export default function TransactionsPage() {
 
   const getBadgeColor = (tipo: string, estado: string) => {
     if (estado === "Fallido") return "red";
+    // Verde/teal para RECARGA, naranja para DONACION/DESCUENTO (egresos)
     return tipo === "RECARGA" ? "green" : "orange";
   };
 
@@ -110,7 +112,7 @@ export default function TransactionsPage() {
       <Paper withBorder p="sm" radius="md" mb="md">
         <Group>
           <TextInput
-            placeholder="Buscar por usuario, celular, producto..."
+            placeholder="Buscar por usuario, celular, producto u obra…"
             value={query}
             onChange={(e) => setQuery(e.currentTarget.value)}
             leftSection={<IconSearch size={16} />}
@@ -124,6 +126,7 @@ export default function TransactionsPage() {
               { value: "TODOS", label: "Todos los tipos" },
               { value: "RECARGA", label: "Recarga" },
               { value: "DESCUENTO", label: "Descuento" },
+              { value: "DONACION", label: "Donación" }, // ← añadido
             ]}
             w={180}
           />
@@ -169,7 +172,8 @@ export default function TransactionsPage() {
               <Table.Th>Usuario</Table.Th>
               <Table.Th>Celular</Table.Th>
               <Table.Th>Tipo</Table.Th>
-              <Table.Th>Producto/Experiencia</Table.Th>
+              <Table.Th>Producto/Experiencia/Obra</Table.Th>
+              {/* ← renombrado */}
               <Table.Th>Valor</Table.Th>
               <Table.Th>Estado</Table.Th>
             </Table.Tr>
@@ -192,68 +196,70 @@ export default function TransactionsPage() {
                 </Table.Td>
               </Table.Tr>
             ) : (
-              pageSlice.map((tx) => (
-                <Table.Tr key={tx.id}>
-                  <Table.Td>
-                    <Text size="sm">{formatDate(tx.createdAt)}</Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm" fw={500}>
-                      {tx.nombreUsuario || "-"}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm">{tx.celular}</Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Badge
-                      variant="light"
-                      color={
-                        getBadgeColor(tx.tipoTransaccion, tx.estado).includes(
-                          "green"
-                        )
-                          ? "teal"
-                          : "orange"
-                      }
-                    >
-                      {tx.tipoTransaccion}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>
-                    <Tooltip
-                      label={
-                        tx.tipoTransaccion === "RECARGA"
-                          ? tx.nombreExperiencia || "-"
-                          : tx.nombreProducto || "-"
-                      }
-                    >
-                      <Text size="sm" lineClamp={1}>
-                        {tx.tipoTransaccion === "RECARGA"
-                          ? tx.nombreExperiencia || "-"
-                          : tx.nombreProducto || "-"}
+              pageSlice.map((tx) => {
+                // Mostrar nombre según tipo: RECARGA → experiencia, DONACION → obra (nombreExperiencia), DESCUENTO → producto
+                const displayName =
+                  tx.tipoTransaccion === "RECARGA"
+                    ? tx.nombreExperiencia || "-"
+                    : tx.tipoTransaccion === "DONACION"
+                    ? tx.nombreExperiencia || "-" // ← obra
+                    : tx.nombreProducto || "-";
+
+                return (
+                  <Table.Tr key={tx.id}>
+                    <Table.Td>
+                      <Text size="sm">{formatDate(tx.createdAt)}</Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm" fw={500}>
+                        {tx.nombreUsuario || "-"}
                       </Text>
-                    </Tooltip>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text
-                      size="sm"
-                      fw={600}
-                      c={tx.tipoTransaccion === "RECARGA" ? "teal" : "orange"}
-                    >
-                      {tx.tipoTransaccion === "RECARGA" ? "+" : "-"}$
-                      {tx.valor.toLocaleString()}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Badge
-                      variant="dot"
-                      color={tx.estado === "Exitoso" ? "green" : "red"}
-                    >
-                      {tx.estado}
-                    </Badge>
-                  </Table.Td>
-                </Table.Tr>
-              ))
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm">{tx.celular}</Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Badge
+                        variant="light"
+                        color={
+                          getBadgeColor(tx.tipoTransaccion, tx.estado).includes(
+                            "green"
+                          )
+                            ? "teal"
+                            : "orange"
+                        }
+                      >
+                        {tx.tipoTransaccion}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Tooltip label={displayName}>
+                        <Text size="sm" lineClamp={1}>
+                          {displayName}
+                        </Text>
+                      </Tooltip>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text
+                        size="sm"
+                        fw={600}
+                        c={tx.tipoTransaccion === "RECARGA" ? "teal" : "orange"}
+                      >
+                        {tx.tipoTransaccion === "RECARGA" ? "+" : "-"}$
+                        {tx.valor.toLocaleString()}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Badge
+                        variant="dot"
+                        color={tx.estado === "Exitoso" ? "green" : "red"}
+                      >
+                        {tx.estado}
+                      </Badge>
+                    </Table.Td>
+                  </Table.Tr>
+                );
+              })
             )}
           </Table.Tbody>
         </Table>

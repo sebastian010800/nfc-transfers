@@ -17,7 +17,7 @@ import {
 import { db } from "../firebase.config";
 
 /** ——— Tipos base ——— */
-export type TipoTransaccion = "RECARGA" | "DESCUENTO";
+export type TipoTransaccion = "RECARGA" | "DESCUENTO" | "DONACION";
 export type EstadoTransaccion = "Exitoso" | "Fallido";
 
 /** Historial almacenado en /transactions */
@@ -163,6 +163,116 @@ export async function createRecargaByCelular(params: {
       tipoTransaccion: "RECARGA",
       idExperiencia: params.idExperiencia,
       nombreExperiencia: exp.nombre,
+      valor: amount,
+      estado: "Exitoso",
+      createdAt: Timestamp.now(),
+    };
+    trx.set(txRef, payload);
+  });
+
+  const final = await getDoc(txRef);
+  return final.data()!;
+}
+export async function createDonacionByCelular(params: {
+  celular: string;
+  monto: number;
+  idObra?: string; // ← NUEVO (opcional)
+  nombreObra?: string; // ← NUEVO (opcional)
+}): Promise<TransactionHistory> {
+  const user = await findUserByCelular(params.celular);
+  const txRef = doc(collection(db, "transactions")).withConverter(txConverter);
+
+  if (!user) {
+    const payload: WithFieldValue<TransactionDoc> = {
+      celular: params.celular,
+      idUser: "",
+      nombreUsuario: "",
+      tipoTransaccion: "DONACION",
+      // Guardamos la obra en los campos existentes de "experiencia" para no cambiar esquema
+      idExperiencia: params.idObra,
+      nombreExperiencia: params.nombreObra,
+      valor: params.monto,
+      estado: "Fallido",
+      mensajeError: "Usuario no encontrado",
+      createdAt: Timestamp.now(),
+    };
+    await setDoc(txRef, payload);
+    return {
+      id: txRef.id,
+      ...(payload as unknown as TransactionDoc),
+    } as TransactionHistory;
+  }
+
+  await runTransaction(db, async (trx) => {
+    const userRef = doc(db, "users", user.id);
+    const userSnap = await trx.get(userRef);
+
+    if (!userSnap.exists()) {
+      const payload: WithFieldValue<TransactionDoc> = {
+        celular: user.celular,
+        idUser: user.id,
+        nombreUsuario: user.nombre,
+        tipoTransaccion: "DONACION",
+        idExperiencia: params.idObra,
+        nombreExperiencia: params.nombreObra,
+        valor: params.monto,
+        estado: "Fallido",
+        mensajeError: "Usuario no encontrado",
+        createdAt: Timestamp.now(),
+      };
+      trx.set(txRef, payload);
+      return;
+    }
+
+    const u = userSnap.data() as AppUserDoc;
+    const amount = Math.max(0, Number(params.monto || 0));
+    const saldoActual = Number(u.saldo || 0);
+
+    if (amount <= 0) {
+      const payload: WithFieldValue<TransactionDoc> = {
+        celular: u.celular,
+        idUser: userSnap.id,
+        nombreUsuario: u.nombre,
+        tipoTransaccion: "DONACION",
+        idExperiencia: params.idObra,
+        nombreExperiencia: params.nombreObra,
+        valor: amount,
+        estado: "Fallido",
+        mensajeError: "Monto de donación inválido",
+        createdAt: Timestamp.now(),
+      };
+      trx.set(txRef, payload);
+      return;
+    }
+
+    if (saldoActual < amount) {
+      const payload: WithFieldValue<TransactionDoc> = {
+        celular: u.celular,
+        idUser: userSnap.id,
+        nombreUsuario: u.nombre,
+        tipoTransaccion: "DONACION",
+        idExperiencia: params.idObra,
+        nombreExperiencia: params.nombreObra,
+        valor: amount,
+        estado: "Fallido",
+        mensajeError: `Saldo insuficiente (disponible: ${saldoActual}, requerido: ${amount})`,
+        createdAt: Timestamp.now(),
+      };
+      trx.set(txRef, payload);
+      return;
+    }
+
+    // ——— Éxito: descontar saldo ———
+    const newSaldo = saldoActual - amount;
+    trx.update(userRef, { saldo: newSaldo });
+
+    const payload: WithFieldValue<TransactionDoc> = {
+      celular: u.celular,
+      idUser: userSnap.id,
+      nombreUsuario: u.nombre,
+      tipoTransaccion: "DONACION",
+      idExperiencia: params.idObra,
+      nombreExperiencia: params.nombreObra,
       valor: amount,
       estado: "Exitoso",
       createdAt: Timestamp.now(),

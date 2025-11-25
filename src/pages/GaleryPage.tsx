@@ -7,7 +7,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Anchor,
-  Badge,
   Button,
   Container,
   Group,
@@ -22,6 +21,8 @@ import {
   CopyButton,
   ActionIcon,
   Tooltip,
+  Modal,
+  TextInput,
 } from "@mantine/core";
 import {
   IconPlayerPlay,
@@ -29,6 +30,7 @@ import {
   IconCopy,
   IconArrowLeft,
   IconCurrencyDollar,
+  IconPhone,
 } from "@tabler/icons-react";
 
 import type { Galeria } from "../services/galeryService";
@@ -36,6 +38,7 @@ import {
   consultarGaleriaPorId,
   editarDonacionesSumando,
 } from "../services/galeryService";
+import { createDonacionByCelular } from "../services/transactionService";
 
 export default function GalleryLanding() {
   const { id } = useParams<{ id: string }>();
@@ -46,7 +49,11 @@ export default function GalleryLanding() {
   const [error, setError] = useState<string | null>(null);
 
   const [donar, setDonar] = useState<number | "">(0);
+  const [celular, setCelular] = useState("");
+  const [modalOpened, setModalOpened] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [donationSuccess, setDonationSuccess] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -83,24 +90,71 @@ export default function GalleryLanding() {
 
   async function applyDonation() {
     if (!item) return;
+
     const m = typeof donar === "number" ? donar : 0;
+    const celularTrimmed = celular.trim();
+
+    // Validaciones en-modal (sin alert)
     if (!isFinite(m) || m <= 0) {
-      alert("Ingresa un monto válido (> 0)");
+      setModalError("Ingresa un monto válido mayor a 0.");
       return;
     }
+
+    if (!celularTrimmed) {
+      setModalError("Por favor ingresa un número de celular.");
+      return;
+    }
+
     try {
       setSaving(true);
+      setModalError(null);
+
+      // 1. Crear la transacción de donación
+      //    >>> Se envía también la referencia de la obra <<<
+      const transaccion = await createDonacionByCelular({
+        celular: celularTrimmed,
+        monto: m,
+        idObra: item.id,
+        nombreObra: item.nombre,
+      });
+
+      // 2. Verificar resultado de la transacción
+      if (transaccion.estado === "Fallido") {
+        setModalError(
+          transaccion.mensajeError ||
+            "No se pudo procesar la donación (posible saldo insuficiente)."
+        );
+        return; // mantener el modal abierto mostrando el error
+      }
+
+      // 3. Actualizar el contador de donaciones en la galería
       const nuevo = await editarDonacionesSumando(item.id, m);
       setItem({ ...item, donaciones: nuevo });
-      setDonar(0);
+
+      // 4. Mostrar mensaje de éxito
+      setDonationSuccess(true);
     } catch (e) {
       const errorMessage =
-        e instanceof Error ? e.message : "No se pudo registrar la donación";
-      alert(errorMessage);
+        e instanceof Error ? e.message : "No se pudo registrar la donación.";
+      setModalError(errorMessage);
       console.error("Error al registrar donación:", e);
     } finally {
       setSaving(false);
     }
+  }
+
+  function openModal() {
+    setModalError(null);
+    setDonationSuccess(false);
+    setModalOpened(true);
+  }
+
+  function closeModal() {
+    setModalOpened(false);
+    setDonationSuccess(false);
+    setModalError(null);
+    setDonar(0);
+    setCelular("");
   }
 
   return (
@@ -157,6 +211,9 @@ export default function GalleryLanding() {
                 style={{
                   position: "relative",
                   width: "100%",
+                  maxWidth: "800px",
+                  margin: "0 auto",
+                  aspectRatio: "16/9",
                   overflow: "hidden",
                   borderRadius: "12px",
                   border: "1px solid #dee2e6",
@@ -170,15 +227,13 @@ export default function GalleryLanding() {
                     height: "100%",
                     width: "100%",
                     display: "block",
+                    objectFit: "contain",
+                    backgroundColor: "#000",
                   }}
                 />
               </div>
             ) : (
-              <Anchor
-                href="#"
-                target="_blank"
-                rel="noreferrer"
-              >
+              <Anchor href="#" target="_blank" rel="noreferrer">
                 <Group gap="xs" align="center">
                   <IconPlayerPlay size={14} />
                   <span>Ver video</span>
@@ -188,40 +243,98 @@ export default function GalleryLanding() {
 
             <Text>{item.descripcion}</Text>
 
-            <Group>
-              <Badge
-                size="lg"
-                variant="light"
-                leftSection={<IconCurrencyDollar size={14} />}
-              >
-                Donaciones: {item.donaciones.toLocaleString("es-CO")}
-              </Badge>
-            </Group>
-
             <Divider my="sm" />
 
-            <Group align="end">
+            <Button
+              onClick={openModal}
+              leftSection={<IconCurrencyDollar size={16} />}
+              size="md"
+            >
+              Apoyar esta obra
+            </Button>
+          </Stack>
+        )}
+      </Paper>
+
+      {/* Modal de Donación */}
+      <Modal
+        opened={modalOpened}
+        onClose={() => !saving && closeModal()}
+        title={donationSuccess ? "¡Donación Exitosa!" : "Apoyar esta obra"}
+        centered
+      >
+        <Stack gap="md">
+          {donationSuccess ? (
+            <>
+              <Alert
+                color="green"
+                variant="light"
+                title="¡Gracias por tu apoyo!"
+              >
+                Tu donación de{" "}
+                <strong>
+                  $
+                  {typeof donar === "number"
+                    ? donar.toLocaleString("es-CO")
+                    : 0}{" "}
+                  COP
+                </strong>{" "}
+                ha sido registrada exitosamente.
+              </Alert>
+              <Button onClick={closeModal} fullWidth>
+                Cerrar
+              </Button>
+            </>
+          ) : (
+            <>
+              {/* Errores visibles en el modal (incluye saldo insuficiente) */}
+              {modalError && (
+                <Alert color="red" variant="light" title="No se pudo completar">
+                  {modalError}
+                </Alert>
+              )}
+
               <NumberInput
-                label="Apoyar esta obra"
-                placeholder="Monto en COP"
+                label="Monto a donar"
+                placeholder="Ingresa el monto en COP"
                 value={donar}
                 onChange={(v) => setDonar(typeof v === "number" ? v : 0)}
                 min={1}
                 thousandSeparator="."
                 decimalSeparator=","
-                maw={220}
-              />
-              <Button
-                onClick={applyDonation}
-                loading={saving}
                 leftSection={<IconCurrencyDollar size={16} />}
-              >
-                Donar
-              </Button>
-            </Group>
-          </Stack>
-        )}
-      </Paper>
+                required
+                disabled={saving}
+              />
+
+              <TextInput
+                label="Número de Celular"
+                placeholder="Ej: 3001234567"
+                value={celular}
+                onChange={(e) => setCelular(e.currentTarget.value)}
+                leftSection={<IconPhone size={16} />}
+                required
+                disabled={saving}
+              />
+
+              <Group justify="flex-end" mt="md">
+                <Button variant="subtle" onClick={closeModal} disabled={saving}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={applyDonation}
+                  loading={saving}
+                  leftSection={
+                    !saving ? <IconCurrencyDollar size={16} /> : undefined
+                  }
+                >
+                  Confirmar Donación
+                </Button>
+              </Group>
+            </>
+          )}
+        </Stack>
+      </Modal>
     </Container>
   );
 }
