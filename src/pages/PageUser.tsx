@@ -23,6 +23,7 @@ import {
   IconUserPlus,
   IconRefresh,
   IconTrash,
+  IconNfc,
 } from "@tabler/icons-react";
 import QRCode from "react-qr-code";
 import { Scanner } from "@yudiel/react-qr-scanner";
@@ -46,6 +47,7 @@ import {
   formatTransactionForList,
   createRecargaByCelular,
 } from "../services/transactionService";
+import { NFCReader } from "../components/NFCReader";
 
 /** Extrae userId desde un QR que apunta a /host?userId=... (o variantes). */
 function extractUserIdFromQr(value: string): string | null {
@@ -162,7 +164,7 @@ export default function UserProfilePage() {
 
   // Modal Agregar contacto
   const [addOpen, setAddOpen] = useState(false);
-  const [addMode, setAddMode] = useState<"scan" | "celular">("scan");
+  const [addMode, setAddMode] = useState<"scan" | "celular" | "nfc">("nfc");
   const [scanActive, setScanActive] = useState(true);
   const [addError, setAddError] = useState("");
   const [pendingContact, setPendingContact] = useState<AppUser | null>(null);
@@ -171,7 +173,7 @@ export default function UserProfilePage() {
   const openAdd = () => {
     setAddError("");
     setPendingContact(null);
-    setAddMode("scan");
+    setAddMode("nfc");
     setScanActive(true);
     setAddOpen(true);
   };
@@ -204,6 +206,29 @@ export default function UserProfilePage() {
     }
     console.log("Contacto escaneado:", contact);
     setPendingContact(contact);
+  };
+
+  const handleNFCRead = async (celularFromNFC: string) => {
+    if (!user) return;
+    console.log("Celular desde NFC:", celularFromNFC);
+    setAddError("");
+    setPendingContact(null);
+
+    const all = await getUsersOnce();
+    const found = all.find((x) => x.celular === celularFromNFC.trim()) ?? null;
+
+    if (!found) {
+      setAddError("No existe un usuario con ese celular.");
+      return;
+    }
+    if (found.id === user.id) {
+      setAddError("No puedes agregarte a ti mismo como contacto.");
+      return;
+    }
+    
+    // Mostrar feedback positivo
+    setAddError("");
+    setPendingContact(found);
   };
 
   const handleFindByCel = async () => {
@@ -350,9 +375,9 @@ export default function UserProfilePage() {
                     }}
                   >
                     <QRCode
-                      value={user.qrCodeValue} // ← Usa SOLO el ID (no URL larga)
+                      value={user.qrCodeValue}
                       size={140}
-                      level="H" // ← ESTO ES LO QUE FALLABA
+                      level="H"
                       fgColor="#000000"
                       bgColor="#ffffff"
                     />
@@ -482,12 +507,13 @@ export default function UserProfilePage() {
             <SegmentedControl
               value={addMode}
               onChange={(v) => {
-                setAddMode(v as "scan" | "celular");
+                setAddMode(v as "scan" | "celular" | "nfc");
                 setAddError("");
                 setPendingContact(null);
                 setScanActive(v === "scan");
               }}
               data={[
+                { label: "Leer NFC", value: "nfc" },
                 { label: "Escanear QR", value: "scan" },
                 { label: "Ingresar celular", value: "celular" },
               ]}
@@ -513,13 +539,12 @@ export default function UserProfilePage() {
                   {scanActive ? (
                     <ScannerComponent
                       onScan={(detectedCodes) => {
-                        // ← CAMBIO CLAVE: Usa onScan, NO onDecode
                         if (
                           detectedCodes.length > 0 &&
                           detectedCodes[0]?.rawValue
                         ) {
                           void handleScan(detectedCodes[0].rawValue);
-                          setScanActive(false); // Detiene después de leer
+                          setScanActive(false);
                         }
                       }}
                       onError={(error) => {
@@ -527,7 +552,6 @@ export default function UserProfilePage() {
                         setAddError(
                           `Error de cámara: ${error?.message || String(error)}`
                         );
-                        // En Xiaomi, reinicia si falla
                         if (
                           error?.name === "NotAllowedError" ||
                           error?.name === "NotFoundError"
@@ -535,13 +559,10 @@ export default function UserProfilePage() {
                           setTimeout(() => setScanActive(false), 1000);
                         }
                       }}
-                      // ← SOLO estas props básicas (sin formats ni focusMode que causan el error)
                       components={{
-                        finder: true, // Cuadro de detección
-                        torch: false, // Desactiva flash para evitar crashes en Redmi viejo
+                        finder: true,
+                        torch: false,
                       }}
-                      // ← NO uses constraints complejos aquí, causan el "t2 is not a function"
-                      // En su lugar, usa defaults de la librería
                     />
                   ) : (
                     <Paper withBorder p="xl" ta="center" bg="gray.1">
@@ -568,7 +589,7 @@ export default function UserProfilePage() {
                   mt="sm"
                   onClick={() => {
                     setScanActive(false);
-                    setTimeout(() => setScanActive(true), 500); // Reinicio forzado
+                    setTimeout(() => setScanActive(true), 500);
                   }}
                   disabled={scanActive}
                 >
@@ -591,6 +612,24 @@ export default function UserProfilePage() {
                   Buscar
                 </Button>
               </Group>
+            )}
+
+            {addMode === "nfc" && (
+              <Stack>
+                <Alert color="blue" icon={<IconNfc />}>
+                  <Text size="sm" fw={500} mb={4}>
+                    Lector NFC activo
+                  </Text>
+                  <Text size="sm">
+                    Acerca el dispositivo NFC del contacto para detectar su celular automáticamente.
+                  </Text>
+                </Alert>
+                
+                <NFCReader 
+                  onCelularRead={handleNFCRead}
+                  disabled={false}
+                />
+              </Stack>
             )}
 
             {addError && (
@@ -640,9 +679,9 @@ export default function UserProfilePage() {
               }}
             >
               <QRCode
-                value={user.qrCodeValue} // ← solo el ID
+                value={user.qrCodeValue}
                 size={280}
-                level="H" // ← imprescindible
+                level="H"
                 fgColor="#000000"
                 bgColor="#ffffff"
               />
