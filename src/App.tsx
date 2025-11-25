@@ -11,7 +11,8 @@ import BarmanPage from "./pages/barman";
 import HostPage from "./pages/host";
 import PageUser from "./pages/PageUser"; // 👈 NUEVO
 import TransactionsPage from "./pages/admin/transactions";
-
+import GaleryAdminPage from "./pages/admin/galery";
+import Gallery from "./pages/GaleryPage"; // 👈 NUEVO
 export default function App() {
   return (
     <Container fluid p={0}>
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="/barman" element={<BarmanPage />} />
         <Route path="/host" element={<HostPage />} />
         <Route path="/user" element={<PageUser />} /> {/* 👈 NUEVO */}
+        <Route path="/galery/:id" element={<Gallery />} /> {/* 👈 NUEVO */}
         {/* Admin layout + nested routes */}
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<Navigate to="users" replace />} />
@@ -27,6 +29,7 @@ export default function App() {
           <Route path="products" element={<ProductsPage />} />
           <Route path="experiences" element={<ExperiencesPage />} />
           <Route path="transactions" element={<TransactionsPage />} />
+          <Route path="galery" element={<GaleryAdminPage />} />
         </Route>
       </Routes>
     </Container>

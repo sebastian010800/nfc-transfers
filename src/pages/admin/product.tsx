@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { useEffect, useMemo, useState } from "react";
 import {
   ActionIcon,
@@ -38,7 +39,12 @@ import type { CellValue } from "../../hooks/useSafeXlsx";
 
 const TEMPLATE_URL = "/plantilla_productos.xlsx"; // Asegúrate de crear esta plantilla
 
-type BulkRow = { nombre: string; valor: number; tipo: string; cantidad: number };
+type BulkRow = {
+  nombre: string;
+  valor: number;
+  tipo: string;
+  cantidad: number;
+};
 type BulkError = { row: number; reason: string };
 
 export default function ProductsPage() {
@@ -321,7 +327,13 @@ export default function ProductsPage() {
                 <Table.Td>
                   <Badge
                     variant="dot"
-                    color={p.cantidad === 0 ? "red" : p.cantidad < 10 ? "yellow" : "green"}
+                    color={
+                      p.cantidad === 0
+                        ? "red"
+                        : p.cantidad < 10
+                        ? "yellow"
+                        : "green"
+                    }
                   >
                     {p.cantidad}
                   </Badge>
