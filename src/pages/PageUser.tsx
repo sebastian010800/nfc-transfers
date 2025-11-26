@@ -15,6 +15,7 @@ import {
   Text,
   TextInput,
   Title,
+  Image,
 } from "@mantine/core";
 import {
   IconAlertCircle,
@@ -283,10 +284,13 @@ export default function UserProfilePage() {
 
   return (
     <Container size="lg" mt="xl">
-      <Title order={2}>Perfil de Usuario</Title>
-      <Text c="dimmed" mb="lg">
-        Consulta por celular, visualiza datos, historial, QR y contactos.
-      </Text>
+      
+        <Image
+      src="\images\HEADER_APP_LECTIR.png" // reemplaza con tu ruta
+      alt="Header"
+      mb="lg"
+      radius="md"
+    />
 
       {!user ? (
         <Group align="flex-end" mb="md">
@@ -695,6 +699,12 @@ export default function UserProfilePage() {
           </Stack>
         )}
       </Modal>
+        <Image
+      src="\images\FOOTER_APP_LECTIR.png" // reemplaza con tu ruta
+      alt="Footer"
+      mt="lg"
+      radius="md"
+    />
     </Container>
   );
 }
