@@ -142,6 +142,12 @@ export default function GalleryLanding() {
       setSaving(false);
     }
   }
+  useEffect(() => {
+  const savedPhone = localStorage.getItem("user_profile_celular");
+  if (savedPhone) {
+    setCelular(savedPhone);
+  }
+}, []);
 
   function openModal() {
     setModalError(null);

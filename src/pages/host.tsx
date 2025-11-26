@@ -160,7 +160,7 @@ export default function HostPage() {
             value={experienceId}
             onChange={setExperienceId}
             leftSection={<IconTicket size={16} />}
-            searchable
+           
             nothingFoundMessage="Sin experiencias"
             disabled={submitting}
           />

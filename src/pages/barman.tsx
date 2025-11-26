@@ -309,7 +309,7 @@ return Array.from({ length: maxCantidad }, (_, i) => ({
                   setCantidad("1"); // Resetear cantidad al cambiar producto
                 }}
                 leftSection={<IconShoppingCart size={16} />}
-                searchable
+              
                 nothingFoundMessage={`Sin productos de tipo ${tipoSeleccionado}`}
                 disabled={submitting}
               />
