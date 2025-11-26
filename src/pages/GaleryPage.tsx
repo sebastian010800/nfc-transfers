@@ -256,7 +256,7 @@ export default function GalleryLanding() {
               leftSection={<IconCurrencyDollar size={16} />}
               size="md"
             >
-              Apoyar esta obra
+              Apoyar fundación María José
             </Button>
           </Stack>
         )}
